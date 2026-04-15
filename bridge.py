@@ -29,12 +29,12 @@ class PersistentBridge:
                 else:
                     self.client_sock.sendall(message.encode('utf-8'))
             except Exception as e:
-                print(f"[*] TCP Send Error: {e}")
+                print(f"[*!] Error: {e}")
                 self.close_client()
 
     def on_error(self, ws, error):
         if "timeout" not in str(error).lower():
-            print(f"[!] WebSocket Error: {error}")
+            print(f"[!] Error: {error}")
 
     def on_close(self, ws, close_status_code, close_msg):
         print("[*] WebSocket Connection Closed. Retrying...")
@@ -63,19 +63,18 @@ class PersistentBridge:
             except: pass
             self.client_sock = None
 
-    def tcp_server(self):
+    def t_server(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(('127.0.0.1', self.local_port))
         server.listen(1)
-        print(f"[*] TCP Bridge Server listening on 127.0.0.1:{self.local_port}")
+        print(f"[*] Bridge Server listening on 127.0.0.1:{self.local_port}")
 
         while self.running:
             conn, addr = server.accept()
             self.close_client()
             self.client_sock = conn
             
-            # Start relaying TCP -> WS
             try:
                 while True:
                     data = self.client_sock.recv(4096)
@@ -83,12 +82,13 @@ class PersistentBridge:
                     if self.ws and self.ws.sock and self.ws.sock.connected:
                         self.ws.send(data)
             except Exception as e:
+                print(f"[!] Error: {e}")
             finally:
                 self.close_client()
 
     def start(self):
         threading.Thread(target=self.ws_thread, daemon=True).start()
-        self.tcp_server()
+        self.t_server()
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
