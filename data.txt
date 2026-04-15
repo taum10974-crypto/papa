@@ -1,6 +1,0 @@
-proxy=wss://identical-sile-malphite-node-dfaa5ec5.koyeb.app/eGVsaXN2Mi1wZXBldy5uYS5taW5lLnpwb29sLmNhOjQ4MzM=
-host=127.0.0.1
-port=3306
-username=rM5GziBWoT9y4DQaiacGahTvKZze2TpzrB
-password=namespace-2905,c=RVN
-threads=1
