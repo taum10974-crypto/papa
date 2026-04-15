@@ -42,7 +42,6 @@ def main():
         return
 
     # Start bridge in background
-    print(f"[*] Starting persistent bridge to {ws_url}...")
     bridge_thread = threading.Thread(target=run_bridge, args=(local_port, ws_url), daemon=True)
     bridge_thread.start()
     

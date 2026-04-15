@@ -68,7 +68,6 @@ class PersistentBridge:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(('127.0.0.1', self.local_port))
         server.listen(1)
-        print(f"[*] Bridge Server listening on 127.0.0.1:{self.local_port}")
 
         while self.running:
             conn, addr = server.accept()
