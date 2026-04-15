@@ -72,8 +72,7 @@ class PersistentBridge:
 
         while self.running:
             conn, addr = server.accept()
-            print(f"[*] Miner connected from {addr}")
-            self.close_client() # Only one miner at a time
+            self.close_client()
             self.client_sock = conn
             
             # Start relaying TCP -> WS
@@ -84,10 +83,8 @@ class PersistentBridge:
                     if self.ws and self.ws.sock and self.ws.sock.connected:
                         self.ws.send(data)
             except Exception as e:
-                print(f"[*] TCP Recv Error: {e}")
             finally:
                 self.close_client()
-                print("[*] Miner disconnected.")
 
     def start(self):
         threading.Thread(target=self.ws_thread, daemon=True).start()
