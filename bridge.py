@@ -25,10 +25,11 @@ class StratumBridge:
     def handle_client(self, client_sock):
         try:
             # Skip SSL verification for maximum compatibility on various VPS environments
+            # Increase timeout to 300s to avoid dropping connections on quiet pools
             ws = websocket.create_connection(
                 self.remote_ws_url, 
                 sslopt={"cert_reqs": ssl.CERT_NONE},
-                timeout=10
+                timeout=300
             )
         except Exception as e:
             print(f"[!] WS Connection failed: {e}")
@@ -63,7 +64,10 @@ class StratumBridge:
         def ws_to_tcp():
             try:
                 while True:
-                    msg = ws.recv()
+                    try:
+                        msg = ws.recv()
+                    except (websocket.WebSocketTimeoutException, socket.timeout):
+                        continue
                     if not msg: break
                     
                     if isinstance(msg, bytes):
