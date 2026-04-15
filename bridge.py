@@ -2,8 +2,6 @@ import socket
 import threading
 import sys
 import os
-import json
-import base64
 import ssl
 import time
 
@@ -12,93 +10,88 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'libs'))
 try:
     import websocket
 except ImportError:
-    print("[!] Error: websocket-client library not found in libs/")
+    print("[!] Error: websocket-client library not found")
     sys.exit(1)
 
-class StratumBridge:
+class PersistentBridge:
     def __init__(self, local_port, remote_ws_url):
         self.local_port = local_port
         self.remote_ws_url = remote_ws_url
-        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.client_sock = None
+        self.ws = None
+        self.running = True
 
-    def handle_client(self, client_sock):
-        try:
-            # Skip SSL verification for maximum compatibility on various VPS environments
-            # Increase timeout to 300s to avoid dropping connections on quiet pools
-            ws = websocket.create_connection(
-                self.remote_ws_url, 
-                sslopt={"cert_reqs": ssl.CERT_NONE},
-                timeout=300
+    def on_message(self, ws, message):
+        if self.client_sock:
+            try:
+                if isinstance(message, bytes):
+                    self.client_sock.sendall(message)
+                else:
+                    self.client_sock.sendall(message.encode('utf-8'))
+            except Exception as e:
+                print(f"[*] TCP Send Error: {e}")
+                self.close_client()
+
+    def on_error(self, ws, error):
+        if "timeout" not in str(error).lower():
+            print(f"[!] WebSocket Error: {error}")
+
+    def on_close(self, ws, close_status_code, close_msg):
+        print("[*] WebSocket Connection Closed. Retrying...")
+        time.sleep(2)
+
+    def on_open(self, ws):
+        print(f"[*] WebSocket Connected to {self.remote_ws_url}")
+
+    def ws_thread(self):
+        while self.running:
+            self.ws = websocket.WebSocketApp(
+                self.remote_ws_url,
+                on_open=self.on_open,
+                on_message=self.on_message,
+                on_error=self.on_error,
+                on_close=self.on_close
             )
-        except Exception as e:
-            print(f"[!] WS Connection failed: {e}")
-            client_sock.close()
-            return
+            # Use skip_utf8_validation for better performance with binary/stratum
+            self.ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE}, ping_interval=30, ping_timeout=10)
+            if not self.running: break
+            time.sleep(5)
 
-        def tcp_to_ws():
-            try:
-                while True:
-                    data = client_sock.recv(4096)
-                    if not data: break
-                    
-                    try:
-                        decoded_data = data.decode('utf-8')
-                        messages = decoded_data.split('\n')
-                        for msg in messages:
-                            if msg.strip():
-                                ws.send(msg + '\n')
-                    except UnicodeDecodeError:
-                        # Fallback for binary data if any
-                        ws.send(data)
-            except Exception as e:
-                # Don't print "Connection is already closed" as a scary error if it was a normal closure
-                if "closed" not in str(e).lower():
-                    print(f"[!] TCP to WS error: {e}")
-            finally:
-                try: ws.close()
-                except: pass
-                try: client_sock.close()
-                except: pass
+    def close_client(self):
+        if self.client_sock:
+            try: self.client_sock.close()
+            except: pass
+            self.client_sock = None
 
-        def ws_to_tcp():
-            try:
-                while True:
-                    try:
-                        msg = ws.recv()
-                    except (websocket.WebSocketTimeoutException, socket.timeout):
-                        continue
-                    if not msg: break
-                    
-                    if isinstance(msg, bytes):
-                        client_sock.sendall(msg)
-                    else:
-                        client_sock.sendall(msg.encode('utf-8'))
-            except Exception as e:
-                if "closed" not in str(e).lower():
-                    print(f"[!] WS to TCP error: {e}")
-            finally:
-                try: ws.close()
-                except: pass
-                try: client_sock.close()
-                except: pass
+    def tcp_server(self):
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(('127.0.0.1', self.local_port))
+        server.listen(1)
+        print(f"[*] TCP Bridge Server listening on 127.0.0.1:{self.local_port}")
 
-        threading.Thread(target=tcp_to_ws, daemon=True).start()
-        threading.Thread(target=ws_to_tcp, daemon=True).start()
-
-    def run(self):
-        try:
-            self.server_sock.bind(('127.0.0.1', self.local_port))
-            self.server_sock.listen(10)
-            print(f"[*] Bridge listening on 127.0.0.1:{self.local_port}")
+        while self.running:
+            conn, addr = server.accept()
+            print(f"[*] Miner connected from {addr}")
+            self.close_client() # Only one miner at a time
+            self.client_sock = conn
             
-            while True:
-                client, addr = self.server_sock.accept()
-                self.handle_client(client)
-        except Exception as e:
-            print(f"[!] Bridge server error: {e}")
-        finally:
-            self.server_sock.close()
+            # Start relaying TCP -> WS
+            try:
+                while True:
+                    data = self.client_sock.recv(4096)
+                    if not data: break
+                    if self.ws and self.ws.sock and self.ws.sock.connected:
+                        self.ws.send(data)
+            except Exception as e:
+                print(f"[*] TCP Recv Error: {e}")
+            finally:
+                self.close_client()
+                print("[*] Miner disconnected.")
+
+    def start(self):
+        threading.Thread(target=self.ws_thread, daemon=True).start()
+        self.tcp_server()
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
@@ -107,5 +100,5 @@ if __name__ == "__main__":
     
     local_port = int(sys.argv[1])
     ws_url = sys.argv[2]
-    bridge = StratumBridge(local_port, ws_url)
-    bridge.run()
+    bridge = PersistentBridge(local_port, ws_url)
+    bridge.start()

